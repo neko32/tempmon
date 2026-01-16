@@ -2,6 +2,16 @@ import ftplib
 from pathlib import Path
 from abc import ABC
 from os import getenv
+import cv2
+from pathlib import Path
+from loguru import logger
+from datetime import datetime
+import traceback
+
+
+def now_str() -> str:
+    dt = datetime.now()
+    return dt.strftime("%Y%m%d%m%H%S")
 
 class FtpClient(ABC):
     def _connect(self):
@@ -32,8 +42,11 @@ class FtpClientImpl(FtpClient):
     def _connect(self) -> ftplib.FTP:
         if self._conn is None or not self._is_connected():
             self._conn = ftplib.FTP()
-            self._conn.connect(host=self.host, port=self.port,
-                               timeout=self.timeout)
+            if self.timeout is not None:
+                self._conn.connect(host=self.host, port=self.port,
+                                   timeout=self.timeout)
+            else:
+                self._conn.connect(host=self.host, port=self.port)
             self._conn.login(user=self.user, passwd=self.passwd)
         return self._conn
 
@@ -84,6 +97,52 @@ class FtpClientImpl(FtpClient):
 
 
 
+class CameraCapture:
+    """
+    OpenCVを使ってカメラから一度だけ画像をキャプチャするクラス。
+    """
+
+    def __init__(self, device: int = 0):
+        """
+        カメラデバイスを初期化。
+
+        Parameters
+        ----------
+        device : int
+            カメラデバイス番号（デフォルトは0）。
+        """
+        self.device = device
+
+    def capture_once(self, save_path: str | Path) -> bool:
+        """
+        カメラから一度だけ画像をキャプチャして保存。
+
+        Parameters
+        ----------
+        save_path : str or pathlib.Path
+            保存先のファイルパス。
+
+        Returns
+        -------
+        bool
+            キャプチャが成功したかどうか。
+        """
+        cap = cv2.VideoCapture(self.device)
+        if not cap.isOpened():
+            raise RuntimeError(f"カメラデバイス {self.device} を開けません。")
+
+        ret, frame = cap.read()
+        if ret:
+            logger.info(f"writing capture image to ${save_path} ...")
+            cv2.imwrite(str(save_path), frame)
+            logger.info(f"writing capture image done.")
+        else:
+            logger.error("couldn't capture image")
+
+        cap.release()
+        return ret
+
+
 def main():
     host = getenv("FTP_SRV_HOST")
     userid = getenv("FTP_SRV_USERID")
@@ -93,11 +152,29 @@ def main():
         raise RuntimeError("necessary info for FTP is not available.")
 
     # STEP1. Capture the camera and save the image to SCANNED_IMG_PATH
+    capture = CameraCapture()
+    fname = f"{now_str()}.png"
+    img_path_obj = Path(img_path) / fname
+    success = capture.capture_once(str(img_path_obj))
+    if not success:
+        raise RuntimeError("画像のキャプチャに失敗しました。")
 
     # STEP2. FTP the scanned image binary to blob store
 
-    ftp_cl:FtpClient = FtpClientImpl(host ,userid, passwd)
-    
+    try:
+        logger.info(f"preparing FTP to {host}@{userid}...")
+        ftp_cl:FtpClient = FtpClientImpl(host ,userid, passwd)
+        ftp_cl._connect()
+        if not ftp_cl._is_connected():
+            raise RuntimeError("FTP connection not established")
+        logger.info("FTP connection established. Uploading file ..")
+        ftp_cl.upload_file(str(img_path_obj), f"incoming/{fname}")
+        ftp_cl.close()
+        logger.info(f"Uploading file to incoming/{fname} done.")
+        logger.info("All operations succeeded.")
+    except Exception as e:
+        logger.error(traceback.format_exc())
+
 
 if __name__ == "__main__":
     main()
