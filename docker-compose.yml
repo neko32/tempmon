@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  webcam-scanner:
+    build: .
+    devices:
+      # Maps the first video device on the host to the container.
+      # NOTE: On Windows with WSL2, ensure you have attached the USB device via usbipd-win
+      # or equivalent if you expected hardware access.
+      # If just testing logic without camera, comment this out or expect failure.
+      - /dev/video0:/dev/video0
+    environment:
+      - FTP_SRV_HOST=${FTP_SRV_HOST:-localhost}
+      - FTP_SRV_USERID=${FTP_SRV_USERID:-user}
+      - FTP_SRV_PASSWD=${FTP_SRV_PASSWD:-password}
+      # The script expects this path to trigger the capture save
+      - SCANNED_IMG_PATH=/app/scans
+    volumes:
+      # Mount a local directory to see the captured images
+      - ./scans:/app/scans
+    restart: "no"
