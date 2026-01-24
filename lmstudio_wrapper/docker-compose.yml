@@ -14,6 +14,9 @@ services:
       - TEMPMON_FTP_USER=${TEMPMON_FTP_USER:-user}
       - TEMPMON_FTP_PASSWD=${TEMPMON_FTP_PASSWD:-password}
       - TEMPMON_FTP_HOST=${TEMPMON_FTP_HOST:-localhost}
+      - TEMPMON_LLM_SRV_HOST=${TEMPMON_LLM_SRV_HOST:-localhost}
+      - TEMPMON_LLM_SRV_PORT=${TEMPMON_LLM_SRV_PORT:-1234}
+      - TEMPMON_MODEL_NAME=${TEMPMON_MODEL_NAME:-google/gemma-3-27b}
     restart: unless-stopped
     # Optional: add healthcheck
     healthcheck:
