@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  lmstudio-wrapper:
+    build: .
+    ports:
+      # Map host port to container port
+      # Format: "HOST_PORT:CONTAINER_PORT"
+      # This allows access from other hosts on the LAN
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - HOST=0.0.0.0
+      - TEMPMON_FTP_USER=${TEMPMON_FTP_USER:-user}
+      - TEMPMON_FTP_PASSWD=${TEMPMON_FTP_PASSWD:-password}
+      - TEMPMON_FTP_HOST=${TEMPMON_FTP_HOST:-localhost}
+    restart: unless-stopped
+    # Optional: add healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
