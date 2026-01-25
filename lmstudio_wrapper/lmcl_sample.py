@@ -35,7 +35,7 @@ with lms.Client(api_host = "192.168.0.158:1234") as lms_cl:
     chat = lms.Chat()
     print("chat created via chat()")
     chat.add_system_prompt(system_prompt)
-    chat.add_user_message("analyze the image and extract the data", images=[image_handle])
+    chat.add_user_message("analyze the image and extract the data.", images=[image_handle])
     print("added system and user messages")
     prediction = model.respond(chat)
     print("respond() called")

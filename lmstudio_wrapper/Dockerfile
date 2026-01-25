@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Install system dependencies if needed
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
@@ -23,6 +24,7 @@ EXPOSE 5000
 ENV FLASK_APP=app.py
 ENV PORT=5000
 ENV HOST=0.0.0.0
+ENV TZ=America/New_York
 
 # Run the application
 CMD ["python", "app.py"]

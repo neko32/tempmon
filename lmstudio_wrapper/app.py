@@ -25,8 +25,10 @@ ftp_host = getenv('TEMPMON_FTP_HOST')
 llm_host = getenv('TEMPMON_LLM_SRV_HOST')
 llm_port = getenv('TEMPMON_LLM_SRV_PORT')
 model_name = getenv('TEMPMON_MODEL_NAME')
+n2n_webhook_url = getenv('TEMPMON_N2N_WEBHOOK_URL')
 with open("llm_system_prompt.md", "r", encoding = 'utf-8') as f:
     system_prompt = f.read()
+    logging.info(f"system prompt to use -- \n{system_prompt}")
 app = Flask(__name__)
 
 
@@ -158,9 +160,11 @@ def analyze_image_endpoint():
                     # Chatはhistoryモジュールから直接インポートして使用
                     chat = lms.Chat()
                     chat.add_system_prompt(system_prompt)
-                    chat.add_user_message("analyze the image and extract the data", images=[image_handle])
+                    cur_datetime = datetime.now()
+                    cur_datetime_s = cur_datetime.strftime("%Y-%m-%d %H:%M:%S")
+                    chat.add_user_message(f"forget the past analysis result and analyze the given image and extract the data. Current system datetime is {cur_datetime_s}", images=[image_handle])
                     logger.info(f"sending request to {llm_host}:{llm_port} with model: {model_name}..")
-                    prediction = model.respond(chat)
+                    prediction = model.respond(chat, config = {"temperature": 0.3})
                     logger.info("got a prediction result.")
                     pred_result = prediction.content.replace("```json", "").replace("```", "").strip()
 
