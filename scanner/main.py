@@ -7,11 +7,12 @@ from pathlib import Path
 from loguru import logger
 from datetime import datetime
 import traceback
+import subprocess
 
 
 def now_str() -> str:
     dt = datetime.now()
-    return dt.strftime("%Y%m%d%m%H%S")
+    return dt.strftime("%Y%m%d_%m%H%S")
 
 class FtpClient(ABC):
     def _connect(self):
@@ -152,12 +153,15 @@ def main():
         raise RuntimeError("necessary info for FTP is not available.")
 
     # STEP1. Capture the camera and save the image to SCANNED_IMG_PATH
-    capture = CameraCapture()
-    fname = f"{now_str()}.png"
+    fname = f"{now_str()}.jpeg"
     img_path_obj = Path(img_path) / fname
-    success = capture.capture_once(str(img_path_obj))
-    if not success:
-        raise RuntimeError("画像のキャプチャに失敗しました。")
+    try:
+        rez = subprocess.run(
+            ["rpicam-jpeg", "-o", str(img_path_obj)],
+            check = True
+        )
+    except Exception as e:
+        raise RuntimeError(e)
 
     # STEP2. FTP the scanned image binary to blob store
 
@@ -168,9 +172,9 @@ def main():
         if not ftp_cl._is_connected():
             raise RuntimeError("FTP connection not established")
         logger.info("FTP connection established. Uploading file ..")
-        ftp_cl.upload_file(str(img_path_obj), f"incoming/{fname}")
+        ftp_cl.upload_file(str(img_path_obj), f"tempmon_incoming/{fname}")
         ftp_cl.close()
-        logger.info(f"Uploading file to incoming/{fname} done.")
+        logger.info(f"Uploading file to tempmon_incoming/{fname} done.")
         logger.info("All operations succeeded.")
     except Exception as e:
         logger.error(traceback.format_exc())
