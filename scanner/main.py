@@ -8,11 +8,12 @@ from loguru import logger
 from datetime import datetime
 import traceback
 import subprocess
+import requests
 
 
 def now_str() -> str:
     dt = datetime.now()
-    return dt.strftime("%Y%m%d_%m%H%S")
+    return dt.strftime("%Y%m%d_%H%M%S")
 
 class FtpClient(ABC):
     def _connect(self):
@@ -143,14 +144,42 @@ class CameraCapture:
         cap.release()
         return ret
 
+def str_to_bool(s: str) -> bool:
+    true_set = {"y", "yes", "t", "true", "on", "1"}
+    false_set = {"n", "no", "f", "false", "off", "0"}
+
+    s_lower = s.strip().lower()
+    if s_lower in true_set:
+        return True
+    elif s_lower in false_set:
+        return False
+    else:
+        raise ValueError(f"Invalid boolean string: {s}")
 
 def main():
-    host = getenv("FTP_SRV_HOST")
-    userid = getenv("FTP_SRV_USERID")
-    passwd = getenv("FTP_SRV_PASSWD")
+    ftp_host = getenv("FTP_SRV_HOST")
+    ftp_userid = getenv("FTP_SRV_USERID")
+    ftp_passwd = getenv("FTP_SRV_PASSWD")
     img_path = getenv("SCANNED_IMG_PATH")
-    if host is None or userid is None or passwd is None or img_path is None:
+    n8n_live_host = getenv("N8N_LIVE_SRV")
+    n8n_test_host = getenv("N8N_TEST_SRV")
+    
+    if ftp_host is None or ftp_userid is None or ftp_passwd is None or img_path is None:
         raise RuntimeError("necessary info for FTP is not available.")
+    is_test_t = getenv("TEMPMON_IS_TEST")
+    if is_test_t is None:
+        is_test = True
+    else:
+        is_test = str_to_bool(is_test_t)
+
+    tempmon_n2n_webhook = f"{n8n_test_host}/webhook-test/analysis-flow" if is_test else f"{n8n_live_host}/webhook/analysis_flow"
+
+    n8n_integ_t = getenv("N8N_INTEGRATION_FLAG")
+    if n8n_integ_t is None:
+        n8n_integ = False
+    else:
+        n8n_integ = str_to_bool(n8n_integ_t)
+    
 
     # STEP1. Capture the camera and save the image to SCANNED_IMG_PATH
     fname = f"{now_str()}.jpeg"
@@ -166,18 +195,41 @@ def main():
     # STEP2. FTP the scanned image binary to blob store
 
     try:
-        logger.info(f"preparing FTP to {host}@{userid}...")
-        ftp_cl:FtpClient = FtpClientImpl(host ,userid, passwd)
+        logger.info(f"preparing FTP to {ftp_host}@{ftp_userid}...")
+        ftp_cl:FtpClient = FtpClientImpl(ftp_host ,ftp_userid, ftp_passwd)
         ftp_cl._connect()
         if not ftp_cl._is_connected():
             raise RuntimeError("FTP connection not established")
         logger.info("FTP connection established. Uploading file ..")
         ftp_cl.upload_file(str(img_path_obj), f"tempmon_incoming/{fname}")
+        ftp_cl.upload_file(str(img_path_obj), f"tempmon_keep/{fname}")
         ftp_cl.close()
         logger.info(f"Uploading file to tempmon_incoming/{fname} done.")
-        logger.info("All operations succeeded.")
     except Exception as e:
         logger.error(traceback.format_exc())
+
+    # 3. fire & forget N8N analysis flow if integration flag is ON
+    if n8n_integ:
+        # tempmon_n2n_webhookにHTTP POSTリクエストを送信
+        try:
+            logger.info(f"Sending POST request to {tempmon_n2n_webhook}...")
+            response = requests.post(
+                tempmon_n2n_webhook,
+                json={"filename": fname, "image_path": str(img_path_obj)},
+                headers={'Content-Type': 'application/json'},
+                timeout=60
+            )
+            logger.info(f"HTTP POST response code: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Failed to send POST request to {tempmon_n2n_webhook}: {str(e)}")
+            logger.error(traceback.format_exc())
+    else:
+        logger.info("N8N integration is OFF. Skipping N8N analysis flow.")
+
+    
+
+    logger.info("All operations succeeded.")
+    
 
 
 if __name__ == "__main__":

@@ -175,6 +175,14 @@ def analyze_image_endpoint():
                     
                     # 処理に成功したファイルはtempdirとFTPサイトからdelete
                     try:
+                        # TODO XX2: 処理が終わったlocal_file_pathのファイルを/tmp/tempmon_doneにコピー
+                        done_dir = "/tmp/tempmon_done"
+                        os.makedirs(done_dir, exist_ok=True)
+                        done_file_path = os.path.join(done_dir, nearest_one)
+                        if os.path.exists(local_file_path):
+                            shutil.copy2(local_file_path, done_file_path)
+                            logger.info(f"Copied processed file to {done_file_path}")
+                        
                         # 一時ディレクトリとその中のファイルを削除
                         if os.path.exists(temp_dir):
                             shutil.rmtree(temp_dir)
