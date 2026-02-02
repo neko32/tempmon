@@ -11,7 +11,11 @@ This README describes the project layout and how to run the scanner with Docker.
 - **Scanner (camera)**  
   Captures images with a Raspberry Pi camera (`rpicam-jpeg`), saves them locally, uploads to FTP, and can send data to n8n analysis flows.
 - **Temperature**  
-  Designed to capture images of thermometers (not sensors) and pass them into analysis flows. See `docs/system.drawio.svg` for the system diagram.
+  Designed to capture images of thermometers (not sensors) and pass them into analysis flows.
+
+### System diagram
+
+![System diagram](docs/system.drawio.svg)
 
 ---
 
