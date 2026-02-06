@@ -9,6 +9,9 @@ from datetime import datetime
 import traceback
 import subprocess
 import requests
+import cloudinary
+import cloudinary.uploader
+from cloudinary.utils import cloudinary_url
 
 
 def now_str() -> str:
@@ -96,8 +99,16 @@ class FtpClientImpl(FtpClient):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-
-
+class CloudinaryClient:
+    def __init__(self, cloud_name: str, api_key: str, api_secret: str):
+        cloudinary.config(
+            cloud_name=cloud_name,
+            api_key=api_key,
+            api_secret=api_secret
+        )
+    def upload_file(self, local_path: str | Path) -> str:
+        resp = cloudinary.uploader.upload(local_path, unique_filename=True, overwrite=True)
+        return resp["secure_url"]
 
 class CameraCapture:
     """
@@ -163,16 +174,23 @@ def main():
     img_path = getenv("SCANNED_IMG_PATH")
     n8n_live_host = getenv("N8N_LIVE_SRV")
     n8n_test_host = getenv("N8N_TEST_SRV")
+    cloudinary_cloud_name = getenv("CLOUDINARY_CLOUD_NAME")
+    cloudinary_api_key = getenv("CLOUDINARY_API_KEY")
+    cloudinary_api_secret = getenv("CLOUDINARY_API_SECRET")
     
     if ftp_host is None or ftp_userid is None or ftp_passwd is None or img_path is None:
         raise RuntimeError("necessary info for FTP is not available.")
+
+    if cloudinary_cloud_name is None or cloudinary_api_key is None or cloudinary_api_secret is None:
+        raise RuntimeError("necessary info for Cloudinary is not available.")
+
     is_test_t = getenv("TEMPMON_IS_TEST")
     if is_test_t is None:
         is_test = True
     else:
         is_test = str_to_bool(is_test_t)
 
-    tempmon_n2n_webhook = f"{n8n_test_host}/webhook-test/analysis-flow" if is_test else f"{n8n_live_host}/webhook/analysis_flow"
+    tempmon_n2n_webhook = f"{n8n_test_host}:5678/webhook-test/analysis-flow" if is_test else f"{n8n_live_host}:5678/webhook/analysis_flow"
 
     n8n_integ_t = getenv("N8N_INTEGRATION_FLAG")
     if n8n_integ_t is None:
@@ -208,6 +226,15 @@ def main():
     except Exception as e:
         logger.error(traceback.format_exc())
 
+    # STEP3. Upload the image to Cloudinary
+    try:
+        logger.info(f"Uploading file to Cloudinary...")
+        cloudinary_cl:CloudinaryClient = CloudinaryClient(cloudinary_cloud_name, cloudinary_api_key, cloudinary_api_secret)
+        url = cloudinary_cl.upload_file(str(img_path_obj))
+        logger.info(f"Uploading file to Cloudinary done. URL: {url}")
+    except Exception as e:
+        logger.error(traceback.format_exc())
+
     # 3. fire & forget N8N analysis flow if integration flag is ON
     if n8n_integ:
         # tempmon_n2n_webhookにHTTP POSTリクエストを送信
@@ -215,11 +242,15 @@ def main():
             logger.info(f"Sending POST request to {tempmon_n2n_webhook}...")
             response = requests.post(
                 tempmon_n2n_webhook,
-                json={"filename": fname, "image_path": str(img_path_obj)},
+                json={"filename": fname, "image_path": str(img_path_obj), "cloudinary_url": url},
                 headers={'Content-Type': 'application/json'},
                 timeout=60
             )
             logger.info(f"HTTP POST response code: {response.status_code}")
+            logger.info(f"HTTP POST response headers: {dict(response.headers)}")
+            logger.info(f"HTTP POST response content: {response.text}")
+            if response.status_code == 405:
+                logger.error(f"405 Method Not Allowed - n8nのwebhookがPOSTメソッドを受け付けていません。URLを確認してください: {tempmon_n2n_webhook}")
         except Exception as e:
             logger.error(f"Failed to send POST request to {tempmon_n2n_webhook}: {str(e)}")
             logger.error(traceback.format_exc())
