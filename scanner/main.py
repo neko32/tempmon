@@ -190,7 +190,7 @@ def main():
     else:
         is_test = str_to_bool(is_test_t)
 
-    tempmon_n2n_webhook = f"{n8n_test_host}:5678/webhook-test/analysis-flow" if is_test else f"{n8n_live_host}:5678/webhook/analysis_flow"
+    tempmon_n2n_webhook = f"{n8n_test_host}:5678/webhook-test/analysis-flow" if is_test else f"{n8n_live_host}:5678/webhook/analysis-flow"
 
     n8n_integ_t = getenv("N8N_INTEGRATION_FLAG")
     if n8n_integ_t is None:
